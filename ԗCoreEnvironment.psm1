@@ -21,15 +21,15 @@
     Author: Aleksey Moskalyov a.k.a. kRaVeda <kraveda@yandex.ru, kraveda@gmail.com>
     GUID: acc18b44-18eb-4360-a7ef-348339eb0ef3
     Invented: 2016-11-15 15:34 +03:00
-    Version: 1.0.0.14-internal
-    Released: 2016-11-16 21:48 +03:00
+    Version: 1.0.0.15-internal
+    Released: 2016-11-17 22:48 +03:00
 .LINK
     https://github.com/kRaVeda/--core-environment
 #>
 #requires -Version 4.0
 
 [datetime]$s?launchedAt = [datetime]::Now;
-[string]$c?TimestampPattern = 'yyyyMMdd\THHmmss.fffffffK';
+[string]$c?TimestampPattern = 'yyyy\-MM\-dd\THH\:mm\:ss.fffffffK';
 $s?content  = [regex]::Match( 
     $MyInvocation.MyCommand.ScriptBlock.StartPosition.Content, 
     '\<\#(?:.(?!\#\>))*?\.SYNOPSIS((?:.(?!\.[A-Z]+|\#\>))*)(?:.(?!\#\>))*?.?\#\>',
@@ -43,27 +43,62 @@ $s?FullName = '{0}/{1}' -f $s?Solution, $s?Name;
 try
 {
     #region /* Import Function Declarations */
-    $v?functionsToExport = [string[]]@();
-    . "$PSScriptRoot\functions\ErrorHandlers.ps1"; $v?functionsToExport += 'Get-RuntimeErrorInfo';
+    $v?functionsToExport = [string[]]@(
+        'Get-RuntimeErrorInfo'
+    );
+    $v?functionsToExport.ForEach{
+        . $('{0}\@functions\{1}.ps1' -f $PSScriptRoot, $PSItem);
+    };
     #endregion /import function declarations/
 }
 catch
 {
-    # get error record
-    [Management.Automation.ErrorRecord]$e = $_
-
-    # retrieve information about runtime error
-    $info = [PSCustomObject]@{
-        Exception = $e.Exception.Message
-        Reason    = $e.CategoryInfo.Reason
-        Target    = $e.CategoryInfo.TargetName
-        Script    = $e.InvocationInfo.ScriptName
-        Line      = $e.InvocationInfo.ScriptLineNumber
-        Column    = $e.InvocationInfo.OffsetInLine
-    }
-    
-    # output information. Post-process collected info, and log info (optional)
-    Write-Debug $info;
+    [Management.Automation.ErrorRecord]$r?error = 
+        if ( $PSItem -is [Management.Automation.ErrorRecord] )
+        {
+            $PSItem;
+        }
+        elseif ( $PSItem -is [Exception] )
+        {
+            $PSItem.ErrorRecord;
+        }
+    ;
+    $r?errorInfo = [PSCustomObject]@{};
+    if ( $r?error.Exception -and $r?error.Exception.Message )
+    { 
+        $r?errorInfo.PSObject.Properties.Add([psnoteproperty]::new('Exception', $r?error.Exception.Message)); 
+    };
+    if ( $r?error.CategoryInfo )
+    { 
+        if ( $r?error.CategoryInfo.Reason )
+        {
+            $r?errorInfo.PSObject.Properties.Add([psnoteproperty]::new('Reason', $r?error.CategoryInfo.Reason)); 
+        }
+        if ( $r?error.CategoryInfo.TargetName )
+        {
+            $r?errorInfo.PSObject.Properties.Add([psnoteproperty]::new('Target', $(
+                $(if($r?error.CategoryInfo.TargetType){'[{0}] ' -f $r?error.CategoryInfo.TargetType}) +
+                $r?error.CategoryInfo.TargetName
+            )));
+        }
+    };
+    if ( $r?error.InvocationInfo )
+    { 
+        if ( $r?error.InvocationInfo.ScriptName )
+        {
+            $r?errorInfo.PSObject.Properties.Add([psnoteproperty]::new('Script', $r?error.InvocationInfo.ScriptName)); 
+            if ( $r?error.InvocationInfo.ScriptLineNumber )
+            {
+                $r?errorInfo.PSObject.Properties.Add([psnoteproperty]::new('Line', $r?error.InvocationInfo.ScriptLineNumber)); 
+            };
+            if ( $r?error.InvocationInfo.OffsetInLine )
+            {
+                $r?errorInfo.PSObject.Properties.Add([psnoteproperty]::new('Offset', $r?error.InvocationInfo.OffsetInLine)); 
+            };
+        };
+    };
+        
+    Write-Error -Exception $PSItem -RecommendedAction 'Troubleshoot module!';
 }
 finally
 {
@@ -77,8 +112,8 @@ finally
 # SIG # Begin signature block
 # MIIdPwYJKoZIhvcNAQcCoIIdMDCCHSwCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU4sB+eK33kVIO5bg7VdRnfmF/
-# KqGgghgQMIIFHDCCA4SgAwIBAgIBAjANBgkqhkiG9w0BAQwFADBcMQswCQYDVQQG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUzAGn8bEregkYnvk5++cGvLRY
+# a1igghgQMIIFHDCCA4SgAwIBAgIBAjANBgkqhkiG9w0BAQwFADBcMQswCQYDVQQG
 # EwJSVTEpMCcGA1UECgwgQWxla3NleSBNb3NrYWx5b3YgYS5rLmEuIGtSYVZlZGEx
 # DDAKBgNVBAsMA1BLSTEUMBIGA1UEAwwLVGhlIFJvb3QgQ0EwHhcNMTYxMTA4MTAz
 # ODMxWhcNNDcxMDI4MTAzODMxWjBgMQswCQYDVQQGEwJSVTEpMCcGA1UECgwgQWxl
@@ -211,25 +246,25 @@ finally
 # CgYDVQQLDANQS0kxGDAWBgNVBAMMD1RoZSBTb2Z0d2FyZSBDQQIBBDAJBgUrDgMC
 # GgUAoHgwGAYKKwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYK
 # KwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAjBgkqhkiG
-# 9w0BCQQxFgQUnzjGZ72umuC9FWqMZB5euIljz+AwDQYJKoZIhvcNAQEBBQAEggGA
-# kGbPV1KcNmTO/djg/RfRpIFzm7LhlcXYq/40ZoNCI4fw1BdKkQ8H+Rc+KS9fdbDc
-# No7bRpqAgVasPm76h9LopK/CYYFWKeaWZSFit90P+rjEriRn5nN2gsPpv2HApMfa
-# CfsajYsZHHo1PQtgunHPvSdjLWbLbt995agFWttShQY69pYbbAKppG5olA2+3+nZ
-# h26IszafLiDULcGdum+MwguBbqmACJXb9OjLDXtgrNNh+2NpL0y6O0rfMQoR6pba
-# IOyno7VRoP/vrPyP6HRzQKuqhi5E7D1BDJ9j7yrgtSGqCVvyG0jYSp0qZQC6HMCq
-# oP60Zi4bE12LwZ0vo0/ZdWvxUOeHJCCSBGfvGBIWLddCmjA1h/83GqlvmOgtEyFe
-# 6MPv/o68aU0ZQqkkaPVPgRup3u1mA9ccvu2DC5pFkPYX+CINtbxPDeETrL+TdfOG
-# RMqVCaGkoZf5bMGZt1tVwcjMg6G5j27sULT0+b9Zzdf0RsF+i9Sae8LG6As7rVFG
+# 9w0BCQQxFgQURSsYgBtYu7lR8SqfWd9/jkx128AwDQYJKoZIhvcNAQEBBQAEggGA
+# KacgVpu8u2Du69UZrrPgPQachgEixwE5Xbyl//kRv8jB+pQtq1KuDzNVtG7TeDGw
+# G5xUlwG7hMw8eA345cGvPhOxegeD0efms3h8K5V5oL2C+kVRBVQWbIDXpWCo4yk6
+# Vfe8xHPsBjGk4vfVIRulIdv+mATfYti7o17WGMN4l2P7S6uWfagzhqbN7vXOaLNe
+# hvBjecVeuOV5Jd4MNaVDgnvT2te3gHn8peOFul88TIJkmfzD9bfJCAtpcLzUt/OC
+# YhCSTupWa8uP2/rmhkmTi7ySNrsrD31wOE/bl0b3sgWQrFJ+d2+aVgyyNIFu3E7P
+# RW73zmyvTZkDkPFYnGPsJRqVFjM82O4qR2Lt8OV0NO6KbLiaTn5otZOoVFGAHbNw
+# wIoWnbBH0Ov72RfV3UEoLplLeRfZ8RujAKJe18439HIQ/2MdJt99J+8gKJs4ixMT
+# D/IPm/JFqkyOYgMLwrAoREVXqO7ReTiRSYA4xqH3o740WYngxHpNv5eITQ2SHQnA
 # oYICDzCCAgsGCSqGSIb3DQEJBjGCAfwwggH4AgEBMHYwYjELMAkGA1UEBhMCVVMx
 # FTATBgNVBAoTDERpZ2lDZXJ0IEluYzEZMBcGA1UECxMQd3d3LmRpZ2ljZXJ0LmNv
 # bTEhMB8GA1UEAxMYRGlnaUNlcnQgQXNzdXJlZCBJRCBDQS0xAhADAZoCOv9YsWvW
 # 1ermF/BmMAkGBSsOAwIaBQCgXTAYBgkqhkiG9w0BCQMxCwYJKoZIhvcNAQcBMBwG
-# CSqGSIb3DQEJBTEPFw0xNjExMTYxODQ4MTVaMCMGCSqGSIb3DQEJBDEWBBTbvhfy
-# 63LJKd1DWNEB1mfirMb1sjANBgkqhkiG9w0BAQEFAASCAQAKZmQUdBw7sHokgN4f
-# jWTSpkyHVAJIYw6k6IigVi71eg+ZFr7v9TWzbB+06C7T5aihmIUC+7J5Ez5bSUvD
-# J5EBwXcikG58Oc6e8GWHm71hZrF7rdXgwM2MxWxUHt7O72lbXfcbZ2BjU2exm2Pp
-# sYDImcN5vUw6dMi7wCQGSp+qmdM9PoEvd/JVbotEKzYNVvR0hy6TJ2i3ePpHPouE
-# uYWxoB5/ET+nAWO9+DdG+SBg73/E51Gp+eUPy/pa09SfTrVf4r43z4cvmjVNLe1f
-# ap0GOn7tM/Lj6aMKkaxMPoEaUBHby7n+skzNhp/GRtnhAA7mBsqq00A73Ujdip3h
-# 2g6N
+# CSqGSIb3DQEJBTEPFw0xNjExMTcxOTQ4MjFaMCMGCSqGSIb3DQEJBDEWBBRljqYi
+# GrIGCt4tbSxWGkxx85JfDjANBgkqhkiG9w0BAQEFAASCAQBYkZI8AapS60coX3r7
+# r4Dc0I5BGrFzPj8HvoPGs6NDL3R9zbCBM3zKdHJttzB35cfdHi9eaM0/9hdnNB9K
+# 51nZ48Wb1pseHPBVTQTF64wVqRJztC/2TXFrJ4M8s9p6spJJdV7BHP/H4GsJTokR
+# Gf6R0yaw6J6Mg0SeOtOgaCGr2ZsATN44O4RHwjBwfVWFE0ngHOPCXMrZ9DWfrJeF
+# zlNhIsviT+v0N+nVBNn/kg685C9KJ+C4VUjoOMw2NgI086mu2DTm7qNmERqjED5F
+# HvES9LrKic7jcQeM65f9nR7htmcOWWJ05uoON41sZQAMKflBAHj/u6iQYdmcb2E1
+# e43G
 # SIG # End signature block
