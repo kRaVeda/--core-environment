@@ -19,6 +19,7 @@
 #requires -Version 4.0
 #requires -Assembly System.Web
 
+'Declare function "Get-RuntimeErrorInfo"...' | Write-Debug;
 function Get-RuntimeErrorInfo
 {
     <#
@@ -43,7 +44,7 @@ function Get-RuntimeErrorInfo
     
     $s?Name = $MyInvocation.MyCommand.Name;
     $s?FullName = '{0}/{1}' -f $(
-        if(Test-Path 'Variable:s?FullName')
+        if(Test-Path -Path 'Variable:s?FullName')
             { $s?FullName }
         else
             { $script:MyInvocation.MyCommand.Name }
@@ -73,14 +74,26 @@ function Get-RuntimeErrorInfo
 
     if ( $v?errorObject -and $v?errorObject.PSObject.TypeNames.Contains([Exception]) )
     {
-        $v?errorObject = $v?errorObject.ErrorRecord;
+        if ( $v?errorObject.ErrorRecord )
+        {
+            $v?errorObject = $v?errorObject.ErrorRecord;
+        }
+        else
+        {
+            $v?errorObject.PSObject.Properties.Add(
+                [psnoteproperty]::new('Exception', $v?errorObject)
+            );
+            $v?errorObject;
+        }
     }
 
     $r?result = [pscustomobject]@{};
     if ( !$v?errorObject )
     {
         $v?Message = 'Parameter -ErrorObject was not specified!';
-        if ( $MyInvocation.BoundParameters.Item('ErrorAction') -ieq 'SilentlyContinue' )
+        if ( $ErrorActionPreference -ieq 'SilentlyContinue' -or
+                ($PSBoundParameters.ContainsKey('ErrorAction') -and 
+                    $PSBoundParameters.Item('ErrorAction') -ieq 'SilentlyContinue') )
         {
             Write-Warning -Message $v?Message;
         }
@@ -90,14 +103,17 @@ function Get-RuntimeErrorInfo
         }
         $r?result.PSObject.Properties.Add([psnoteproperty]::new('Warning', $v?Message));
     }
-    elseif ( !$v?errorObject.PSObject.TypeNames.Contains([Management.Automation.ErrorRecord]) )
+    elseif ( !$v?errorObject.PSObject.TypeNames.Contains([Management.Automation.ErrorRecord]) -and
+                !$v?errorObject.PSObject.TypeNames.Contains([Exception]) )
     {
-        $v?Message = 'Unrecognized error object! (type: [{0}])'
-        Write-Error -Message $v?Message;
-        $r?result.PSObject.Properties.Add([psnoteproperty]::new('Error', $v?Message -f $v?errorObject.GetType().Name));
+        $v?Message = 'Unrecognized error object! (object type: [{0}], expected object type: [ErrorRecord] or [Exception])' -f @(
+            $v?errorObject.GetType().Name
+        );
+        Write-Error -Message $v?Message -Category InvalidArgument -CategoryReason 'InvalidArgumentType';
+        $r?result.PSObject.Properties.Add([psnoteproperty]::new('Error', $v?Message));
     }
     else
-    {
+    { $v?errorObject.Exception | Write-Debug;
         if ( $v?errorObject.Exception -and $v?errorObject.Exception.Message )
         { 
             $r?result.PSObject.Properties.Add([psnoteproperty]::new('Exception', $v?errorObject.Exception.Message)); 
@@ -194,12 +210,13 @@ function Get-RuntimeErrorInfo
         }
     );
 }
+'...done /declare function Get-RuntimeErrorInfo/' | Write-Debug;
 
 # SIG # Begin signature block
 # MIIdPwYJKoZIhvcNAQcCoIIdMDCCHSwCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUApJWO/92Wq4MPHFjrPjRozVu
-# fCGgghgQMIIFHDCCA4SgAwIBAgIBAjANBgkqhkiG9w0BAQwFADBcMQswCQYDVQQG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUCu+aVxfEB0XzSf2yxLIRSiqQ
+# 8WugghgQMIIFHDCCA4SgAwIBAgIBAjANBgkqhkiG9w0BAQwFADBcMQswCQYDVQQG
 # EwJSVTEpMCcGA1UECgwgQWxla3NleSBNb3NrYWx5b3YgYS5rLmEuIGtSYVZlZGEx
 # DDAKBgNVBAsMA1BLSTEUMBIGA1UEAwwLVGhlIFJvb3QgQ0EwHhcNMTYxMTA4MTAz
 # ODMxWhcNNDcxMDI4MTAzODMxWjBgMQswCQYDVQQGEwJSVTEpMCcGA1UECgwgQWxl
@@ -332,25 +349,25 @@ function Get-RuntimeErrorInfo
 # CgYDVQQLDANQS0kxGDAWBgNVBAMMD1RoZSBTb2Z0d2FyZSBDQQIBBDAJBgUrDgMC
 # GgUAoHgwGAYKKwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYK
 # KwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAjBgkqhkiG
-# 9w0BCQQxFgQUYg86HaAuMuwOq9kvBNKEbcYjW1MwDQYJKoZIhvcNAQEBBQAEggGA
-# fLeXxJ7/13ClcznPyKeFxecOUoETcxyjS3k0aQ0fOkB/bXO3GiwRU9EbaiiVir5T
-# CoqXX2H2CUX/kL5wKCIRJnqM+ZBWfWB62WnrJMBQGaiJi4vYbqW0vcVtMOXImd8B
-# xuJ94tZsYp9DM7KD2T86mPqkCQEF2jMhFyo2ojo0/+c+aWbQ4qnS/5QBzeBjrBUs
-# X2JLHogBYz4QFRoCW0yuHuriUe3r9TsKP25rTmfJJmeVFQDHzvhcPw0ZPKBB1cQl
-# z/HUOBz5lonbnHYWLPALh0OAs7Ym3uPhuEt8FrBkRsXazQMwdfsZ4sAuE5zztHbw
-# hYJNn41EjFfEnuKffuwovcFzMzUENXR7HkLO741WQqYwDI71g8ynmt18OrhPIawR
-# xGlSJvx0JMv9lu/FOPCjhXt//UTrh/nmWUUNAuWBHarJCQ3TfYKHQ0KcRQNB1d7P
-# ATdS62mhvh8BYnBdNADW4yCWcTqjQX7hfyAhbDthQbF/ysj0LpZN75M43W6Lynbs
+# 9w0BCQQxFgQUuQXy0IYtFaTWcQDvvpUzryyGuuswDQYJKoZIhvcNAQEBBQAEggGA
+# H9zxg38dcCvBjzZceNL+ys0GH3GJ0ajfUTuQzt1DtXF6sPJugOw0jDvYOxT3HzEL
+# rrJQe1JneUUJsCm5CA2Txtgliam5ZG0M+GZoxzRNkcGvAdBupPmHNCONvofU2x8G
+# hUnDpjRBQSekbynQnvZR2Q0fsacrnhljUER+EG8ZMqazYq76W2OzyNcLrAUzzxnL
+# +uFNT/uSwt/om56dv5cLpzfKsDlABqxsTJAMASGBrPVyVzFA4gXmnH8oPe41xQk0
+# NcEyG80V7wO4oq4RaxRNK1Wff7uku90aI2f8LwORlxAHXWDU1L+v/TQ6V5VD27W7
+# HxVqQelMtGaQi6uV018fzPB84wXLldVVd92Z2M2wt5M492pt/+EVbuduq6QHKagq
+# uV7SgjjycHX5PRarcp+oYdjv423LVs7Gmi7iPnF3nGsYzJo7xNe7lG8I2TmXBluu
+# 5P/MuxDB1XQydbvXr5qHYRsXXiawFvSn29SmGCuczRphLE58SbMn5B734zla0Lwk
 # oYICDzCCAgsGCSqGSIb3DQEJBjGCAfwwggH4AgEBMHYwYjELMAkGA1UEBhMCVVMx
 # FTATBgNVBAoTDERpZ2lDZXJ0IEluYzEZMBcGA1UECxMQd3d3LmRpZ2ljZXJ0LmNv
 # bTEhMB8GA1UEAxMYRGlnaUNlcnQgQXNzdXJlZCBJRCBDQS0xAhADAZoCOv9YsWvW
 # 1ermF/BmMAkGBSsOAwIaBQCgXTAYBgkqhkiG9w0BCQMxCwYJKoZIhvcNAQcBMBwG
-# CSqGSIb3DQEJBTEPFw0xNjExMTYxODQ2MDVaMCMGCSqGSIb3DQEJBDEWBBRSrhg3
-# cVPefwZElvFip02i3muTgjANBgkqhkiG9w0BAQEFAASCAQBA/zKrtlXDlnoBPr+B
-# Vdhq6VHtj4OjwkhWEAfvOXpSRXOdCP88QfJZ+BzQDN6U3ExQLMsw4j0zY15p/jPW
-# wJ/8Jxb4LUIhgvCywS0wEWONLUyPDnvW2ISDEyPiOql92qsBFoIKgWdQsDwXrOh0
-# KU1VyK4q+CVYF3qmzeRZAGuYg+9wjWvnGkF6cyjK9v1YpsukpzJ0DnaS4IC6GWhk
-# 2zZJ1qKEhG0uzB1wQOMsilL5yGcmssCnmk96NEnis0S+6iC8Z7af+ahsiIgICiYn
-# 8K40NbT9ORs2clCK5GdbRj7qHJFW5rY3DhWnhX6KAQucOxOZcmpitddRZTD3upCN
-# EQ7L
+# CSqGSIb3DQEJBTEPFw0xNjExMTcxOTQ1NDZaMCMGCSqGSIb3DQEJBDEWBBS8WCmW
+# 1lMMhb5GP+IUAdMV1cJfOTANBgkqhkiG9w0BAQEFAASCAQAFOYXgZ8sjcsHoEDYz
+# DfBEI+J6ooH9G83aoSL4WQb2yxmW//kGJK0Jpg8ezexD/74HkjTjzmXpN6emYThK
+# Y3tpB0Xlv/Hc++LNDxtpDuEz4ed+DPitMxuaw55YOkVKqzvGgyhjbq4W9kc82XSv
+# o3jpM5gvWib2+cEXGCbumTuL1+FfthOw1sd+TPtYSHBooKtmNlVfR9LF5ORhXtKZ
+# mjW7huVayWSP4wQc/Xr9KtqwVnS6myhCxZ/grvP7i3Mbk8YRfjICrnf14ZuruXer
+# VZ/FNFLQZWOpeXDwr0NhGblJXYqoZGnBJxvRNL92MaamhjrpYtnE1jkalKjt9TtH
+# bC+q
 # SIG # End signature block
